@@ -1,13 +1,12 @@
-// Scaffold acceptance test: the interface stubs carry the documented
-// defaults, and the R2/R3 entry points throw std::logic_error until
-// their rungs land. R1 (kitaev_chain, exact_eigenvalues) is implemented
-// and gated in test_r1.cpp. Every check prints its measured value; any
-// failure exits nonzero.
+// Scaffold acceptance test: the interface carries the documented
+// defaults. R1 (kitaev_chain, exact_eigenvalues), R2 (local_moments),
+// and R3 (jackson_kernel, ldos) are implemented and gated in
+// test_r1.cpp, test_r2.cpp, and test_r3.cpp. Every check prints its
+// measured value; any failure exits nonzero.
 
 #include "majorana/kitaev.hpp"
 
 #include <cstdio>
-#include <stdexcept>
 #include <string>
 
 namespace {
@@ -18,16 +17,6 @@ void check(bool ok, const char* name, const std::string& detail) {
   std::printf("[%s] %s: %s\n", ok ? "pass" : "FAIL", name, detail.c_str());
   if (!ok)
     ++failures;
-}
-
-template <typename F>
-bool throws_not_implemented(F&& f) {
-  try {
-    f();
-  } catch (const std::logic_error& e) {
-    return std::string(e.what()).find("not implemented") != std::string::npos;
-  }
-  return false;
 }
 
 } // namespace
@@ -50,13 +39,6 @@ int main() {
   const majorana::CsrMatrix empty;
   std::snprintf(buf, sizeof buf, "n=%d nnz=%d", empty.n, empty.nnz());
   check(empty.n == 0 && empty.nnz() == 0, "CsrMatrix empty state", buf);
-
-  check(throws_not_implemented([&] { majorana::local_moments(empty, 0, lp); }),
-        "local_moments stub throws", "DESIGN.md R2");
-  check(throws_not_implemented([&] { majorana::jackson_kernel(16); }),
-        "jackson_kernel stub throws", "DESIGN.md R3");
-  check(throws_not_implemented([&] { majorana::ldos({}, {}, 1.0, 0.0, 16); }),
-        "ldos stub throws", "DESIGN.md R3");
 
   std::printf("%s (%d failure%s)\n",
               failures == 0 ? "ALL CHECKS PASSED" : "FAILURES", failures,

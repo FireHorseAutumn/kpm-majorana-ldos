@@ -28,3 +28,18 @@ add_executable(test_r1 tests/test_r1.cpp)
 target_link_libraries(test_r1 PRIVATE majorana)
 target_compile_options(test_r1 PRIVATE -Wall -Wextra)
 add_test(NAME r1 COMMAND test_r1)
+
+add_executable(test_r2 tests/test_r2.cpp)
+target_link_libraries(test_r2 PRIVATE majorana)
+target_compile_options(test_r2 PRIVATE -Wall -Wextra)
+add_test(NAME r2 COMMAND test_r2)
+
+add_executable(test_r3 tests/test_r3.cpp)
+target_link_libraries(test_r3 PRIVATE majorana)
+target_compile_options(test_r3 PRIVATE -Wall -Wextra)
+add_test(NAME r3 COMMAND test_r3)
+
+add_executable(test_r4 tests/test_r4.cpp)
+target_link_libraries(test_r4 PRIVATE majorana)
+target_compile_options(test_r4 PRIVATE -Wall -Wextra)
+add_test(NAME r4 COMMAND test_r4)

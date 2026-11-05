@@ -1,10 +1,42 @@
 # DESIGN.md — kpm-majorana-ldos
 
 Design record for Kitaev-chain edge LDOS and the zero-mode peak by KPM.
-Status: R1 done (2026-11-04) — the chain builder and the Eigen ED
-oracle are implemented; the R2/R3 interfaces remain throwing stubs. The
-R1 gates pass at L = 32, t = 1: PHS worst 1.2e-14 (bound 1e-12); two
-exact zero modes at the sweet spot, |E| <= 4.4e-17, end-site weight
+Status: R4 done (2026-11-05) — the transition sweep passes at L = 256,
+t = delta = 1, mu across 2t on 50 points (0.0:0.1:3.0 coarse,
+1.82:0.02:2.18 fine), window |E| <= 0.05 at n_cheb = 16384 (broadening
+<= 1.04e-3 = window/48). Peak present for mu <= 1.8 (min window weight
+0.095, the exact (1 - r^2)/2 row-0 pair weight, pin 0.05), absent for
+mu >= 2.2 (under exact kernel-leakage ceilings); crossover bracket
+[1.88, 2.06] contains 2t, half-width 0.090 vs the hard-derived 0.10
+resolution; bulk gap closing visible in the same window (7.8e-3 at
+mu = 2t vs <= 5.7e-10 open-side; argmax mu* = 1.98, bound 0.05). Kill 2
+cross-gate 7.6e-15 over both rows and all points (bound 1e-9). The
+first run failed the half-width as first stated (0.075): a factor-2
+error in the header's end-weight expectation, confirmed by the ED
+column and re-derived hard; no oracle-comparison bound moved (record
+in the test_r4.cpp header). R3 done (2026-11-05) — the full pipeline is implemented and no
+stubs remain. The R3 gates pass at L = 1000, sweet spot, n_cheb = 4000:
+end-site peak weight |W_end - w_ED| = 3.9975e-9 against a pin of
+4.2433e-9 computed from the kernel arithmetic and the ED oracle before
+the KPM moments ran (w_ED = 1/2, the R1 exact end Majoranas; the pin
+is the known broadening 1 - K(0) = 8.14e-9 halved, plus the bulk-band
+kernel leakage 1.46e-10, plus 1e-10 roundoff); bulk-site in-gap weight
+1.457e-10 against the pinned leakage bound 2.457e-10; the end-site peak
+sits within one grid bin of E = 0 (2.7e-4 against 8.1e-4). Heights are
+resolution-limited and reported, never gated: zero peak 90.61 vs bulk
+band 64.08 on the end site; the bulk site is flat at zero inside the
+gap. The carried R2 gate landed at L = 32: row-summed LDOS vs the ED
+histogram, L1 = 0.115678 (off-sweet) and 0.293400 (trivial) against
+pins of L1(ED-moments reconstruction) + 1e-6. R2 (2026-11-05):
+local_moments; cross-gate passed at L = 32, t = 1: worst linf
+2.275e-14 (bound 1e-13) over all 64 rows and n <= 16 across three
+parameter sets (sweet; delta = 0.8, mu = 0.5; mu = 3). The gate sits
+at n_cheb = 16 because the FP64 cross-check roundoff grows linearly in
+the moment index (sweet chain: 5.9e-14 at n = 64, 9.8e-13 at n = 1024)
+— the tolerance is pre-committed, the moment count is not. R1
+(2026-11-04): the chain builder and the Eigen ED oracle; gates passed
+at L = 32, t = 1: PHS worst 1.2e-14 (bound 1e-12); two exact zero
+modes at the sweet spot, |E| <= 4.4e-17, end-site weight
 1 - 4.4e-16 (bound 1e-12); min|E| = 1.0239 at mu = 3 against the bulk
 gap; Tr H = 0 exactly (bound 1e-13). The gap bound is derived from the
 built chain's Bloch Hamiltonian — E(k) = ±sqrt((2t cos k + mu)^2 +
@@ -116,7 +148,15 @@ surface to depend on or reimplement. The choice binds at R2, when
 `local_moments` needs the recurrence: default a CMake build dependency
 against a pinned kpm-tightbinding commit, fallback a local
 reimplementation of the small CSR surface under cross-gate. That repo is
-never modified by this work.
+never modified by this work. R2 decision (2026-11-05): the blocker the
+bdg sibling recorded applies unchanged — that repo's CMake forces CUDA
+(project(... CXX CUDA), find_package(CUDAToolkit REQUIRED)) and exports
+nothing (no install/export), so neither find_package nor FetchContent
+is usable from this host-only build. The fallback is in effect:
+`majorana::CsrMatrix` stays layout-identical and the recurrence is
+local, under the ED cross-gate. kpm-tightbinding HEAD at decision time:
+c596c86a0e343be25e735a8be2433ee163ac0809, read-only and unmodified.
+The integration decision is deferred, not made.
 
 ## 7. Primary sources needed before physics claims
 
