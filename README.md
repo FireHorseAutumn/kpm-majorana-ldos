@@ -56,7 +56,7 @@ worst linf 2.275e-14 (bound 1e-13) at L = 32. R1 (2026-11-04):
 `exact_eigenvalues` are the Eigen dense ED oracle; PHS worst 1.2e-14
 (bound 1e-12); two exact sweet-spot zero modes, |E| <= 4.4e-17, with
 end-site weight 1 - 4.4e-16; min|E| = 1.0239 at mu = 3 against the
-derived bulk gap |mu - 2t| = 1; Tr H = 0 exactly. CTest 4/4, zero
+derived bulk gap |mu - 2t| = 1; Tr H = 0 exactly. CTest 5/5, zero
 warnings. The design record — chain scope, the ED and analytic end-mode
 oracles, the gated rung decomposition, kill criteria, and the
 primary-source reading list — is [`DESIGN.md`](DESIGN.md).
