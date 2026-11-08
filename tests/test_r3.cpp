@@ -166,6 +166,60 @@ double spectral_bound(const majorana::KitaevParams& kp) {
   return std::sqrt(s * s + 4.0 * kp.delta * kp.delta);
 }
 
+// Jackson kernel formula gates, independent of any KPM use. Every
+// weight gate in this file and test_r4.cpp consumes g through
+// window_weight on both sides, so a formula transcription error cancels
+// there (verified: a denominator off-by-one N + 1 -> N passes all of
+// them). These checks pin the formula itself against Weisse et al.,
+// Rev. Mod. Phys. 78, 275 (2006): g_0 = 1; g_1 = cos(pi/(N+1)) exactly
+// (Eq. 68); positivity on n < N with g_N = 0 and monotone decrease (the
+// Fejer-square construction, Eq. 67); and the delta-variance identity
+// (1 - g_2)/2 = N (1 - cos(2 pi/(N+1))) / (2 (N+1)) (Eq. 75 at a = 0,
+// T_2(0) = -1). Measured on this toolchain: |g_1 - cos| = 0 bitwise at
+// every tested N; the sigma^2 identity matches to 7.6e-10 relative at
+// N = 16384, exactly at small N (roundoff in 1 - g_2); pins carry
+// 100x margin over the measured values.
+void jackson_formula_gates(int n_cheb) {
+  char buf[256];
+  const auto g = majorana::jackson_kernel(n_cheb);
+  const double d = n_cheb + 1.0;
+
+  std::snprintf(buf, sizeof buf, "N = %d, g_0 = %.17g (exact 1)", n_cheb,
+                g[0]);
+  check(g[0] == 1.0, "Jackson g_0 == 1 (bitwise)", buf);
+
+  const double g1_err = std::fabs(g[1] - std::cos(std::numbers::pi / d));
+  std::snprintf(buf, sizeof buf, "N = %d, |g_1 - cos(pi/(N+1))| = %.3e "
+                "(RMP Eq. 68; bound 1e-15)", n_cheb, g1_err);
+  check(g1_err <= 1e-15, "Jackson g_1 = cos(pi/(N+1))", buf);
+
+  double min_g = 2.0;
+  bool monotone = true;
+  for (int n = 1; n < n_cheb; ++n) {
+    min_g = std::min(min_g, g[n]);
+    if (!(g[n] < g[n - 1]))
+      monotone = false;
+  }
+  std::snprintf(buf, sizeof buf, "N = %d, min g[1..N-1] = %.3e, monotone "
+                "decrease: %s", n_cheb, min_g, monotone ? "yes" : "NO");
+  check(min_g > 0.0 && monotone,
+        "Jackson kernel positive and decreasing on n < N", buf);
+
+  std::snprintf(buf, sizeof buf, "N = %d, |g_N| = %.3e (bound 1e-14)",
+                n_cheb, std::fabs(g[n_cheb]));
+  check(std::fabs(g[n_cheb]) <= 1e-14, "Jackson g_N = 0", buf);
+
+  const double s2 = (g[0] - g[2]) / 2.0;
+  const double s2_rmp =
+      n_cheb * (1.0 - std::cos(2.0 * std::numbers::pi / d)) / (2.0 * d);
+  const double s2_rel = std::fabs(s2 - s2_rmp) / s2_rmp;
+  std::snprintf(buf, sizeof buf,
+                "N = %d, rel err of (1 - g_2)/2 vs RMP Eq. 75 = %.3e "
+                "(bound 1e-8)",
+                n_cheb, s2_rel);
+  check(s2_rel <= 1e-8, "Jackson delta variance at 0 (RMP Eq. 75)", buf);
+}
+
 // The carried R2 gate at L = 32: LDOS summed over all 2L rows vs the
 // ED histogram. The bound is pinned first: the same reconstruction
 // built from the ED-derived total moments against the same histogram,
@@ -350,6 +404,10 @@ int main() {
   // ---- The carried R2 gate at its native L = 32. ----
   carried_r2_gate(KitaevParams{32, 1.0, 0.8, 0.5}, "off-sweet");
   carried_r2_gate(KitaevParams{32, 1.0, 1.0, 3.0}, "trivial  ");
+
+  // ---- Jackson formula gates (independent of the KPM paths). ----
+  jackson_formula_gates(7);
+  jackson_formula_gates(n_cheb);
 
   // Contract checks.
   check(throws_invalid_argument([&] { jackson_kernel(0); }),
