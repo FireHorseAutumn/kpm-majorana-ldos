@@ -121,6 +121,14 @@ inline std::vector<double> exact_eigenvalues(const CsrMatrix& A) {
 /// Deterministic; no stochastic trace. Vector recurrence t_0 = e_i,
 /// t_1 = H' e_i, t_{n+1} = 2 H' t_n - t_{n-1}, so mu_n = t_n[i].
 /// Returns mu_0..mu_n_cheb (size n_cheb + 1).
+///
+/// The recurrence is bounded exactly when the spectrum of H lies in
+/// [b - a, b + a]: |T_n| <= 1 on [-1, 1], so ||t_n|| <= ||t_0|| = 1.
+/// If a under-covers the spectrum, T_n(H') grows exponentially and the
+/// moments are silently wrong, so every recurrence vector is norm-checked
+/// (NaN fails the same check, catching a NaN a or b). Roundoff keeps
+/// ||t_n||^2 at 1 + O(n * eps); the 1e-6 tolerance is five decades above
+/// that and decades below any real violation.
 inline std::vector<double> local_moments(const CsrMatrix& A, int site,
                                          const LdosParams& p) {
   if (p.n_cheb < 1)
@@ -139,16 +147,30 @@ inline std::vector<double> local_moments(const CsrMatrix& A, int site,
       y[row] = (acc - b * x[row]) / a;
     }
   };
+  const auto check_bounded = [](double norm2) {
+    if (!(norm2 <= 1.0 + 1e-6))
+      throw std::runtime_error(
+          "local_moments: recurrence vector norm exceeded 1; the spectrum "
+          "of H is not covered by [b - a, b + a] (increase a)");
+  };
   std::vector<double> mu(p.n_cheb + 1);
   std::vector<double> t_prev(A.n, 0.0), t_cur(A.n), t_next(A.n);
   t_prev[site] = 1.0;
   mu[0] = 1.0;
   spmv_scaled(t_prev, t_cur);
+  double norm2_1 = 0.0;
+  for (double x : t_cur)
+    norm2_1 += x * x;
+  check_bounded(norm2_1);
   mu[1] = t_cur[site];
   for (int n = 1; n < p.n_cheb; ++n) {
     spmv_scaled(t_cur, t_next);
-    for (int i = 0; i < A.n; ++i)
+    double norm2 = 0.0;
+    for (int i = 0; i < A.n; ++i) {
       t_next[i] = 2.0 * t_next[i] - t_prev[i];
+      norm2 += t_next[i] * t_next[i];
+    }
+    check_bounded(norm2);
     mu[n + 1] = t_next[site];
     std::swap(t_prev, t_cur);
     std::swap(t_cur, t_next);

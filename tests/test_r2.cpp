@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -43,6 +44,16 @@ bool throws_invalid_argument(F&& f) {
   try {
     f();
   } catch (const std::invalid_argument&) {
+    return true;
+  }
+  return false;
+}
+
+template <typename F>
+bool throws_runtime_error(F&& f) {
+  try {
+    f();
+  } catch (const std::runtime_error&) {
     return true;
   }
   return false;
@@ -154,6 +165,23 @@ int main() {
         "a = 0 (unset spectral bound) rejected", "invalid_argument");
   check(throws_invalid_argument([&] { local_moments(H, H.n, good); }),
         "site out of range rejected", "invalid_argument");
+
+  // An a that under-covers the spectrum makes T_n(H') grow
+  // exponentially; the moments turn to garbage silently unless the
+  // recurrence norm guard fires. Same for a NaN bound (the a <= 0
+  // validation cannot see NaN). Half the documented bound puts
+  // lambda'_max = 2, so the norm crosses the guard within a few steps.
+  check(throws_runtime_error(
+            [&] { local_moments(H, 0, LdosParams{256, 0.5 * good.a, 0.0}); }),
+        "under-covered spectrum rejected (norm guard)", "runtime_error");
+  check(throws_runtime_error(
+            [&] {
+              local_moments(H, 0,
+                            LdosParams{256,
+                                       std::numeric_limits<double>::quiet_NaN(),
+                                       0.0});
+            }),
+        "NaN spectral bound rejected (norm guard)", "runtime_error");
 
   std::printf("%s (%d failure%s)\n",
               failures == 0 ? "ALL CHECKS PASSED" : "FAILURES", failures,
