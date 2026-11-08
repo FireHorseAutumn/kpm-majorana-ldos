@@ -152,6 +152,27 @@ double bin_average(const std::vector<std::pair<double, double>>& dos,
   return cnt > 0 ? acc / cnt : 0.0;
 }
 
+// Window weight by the midpoint rule in theta = arccos(E/a) of an
+// ldos() grid over |E| <= e_win: an independent path from moments to
+// window weight that shares nothing but the moments. Every other weight
+// gate consumes the analytic window formula on both sides, so an error
+// in that formula — or in ldos()'s normalization (the 2/pi, the 1/a) —
+// cancels out of them; this check crosses the two paths. Measured
+// quadrature error at this file's settings (L = 500..1000, n_cheb =
+// 4000, w = 0.2): 6.8e-11 at n_grid = 2048, ~1e-13 at n_grid = 16384;
+// the 1e-8 pin carries 100x margin over the coarser-grid measurement.
+double trapz_window(const std::vector<std::pair<double, double>>& dos,
+                    double a, double e_win, int n_grid) {
+  const double dth = std::numbers::pi / n_grid;
+  double acc = 0.0;
+  for (const auto& p : dos) {
+    if (std::fabs(p.first) > e_win)
+      continue;
+    acc += p.second * a * std::sin(std::acos(p.first / a)) * dth;
+  }
+  return acc;
+}
+
 double l1_vs_hist(const std::vector<std::pair<double, double>>& dos,
                   const std::vector<std::pair<double, double>>& hist,
                   double dE) {
@@ -375,6 +396,18 @@ int main() {
                 std::fabs(dos_end[k_peak].first), 1.5 * dE0);
   check(std::fabs(dos_end[k_peak].first) <= 1.5 * dE0,
         "end-site LDOS peak within one grid bin of E = 0", buf);
+
+  // Quadrature cross-gate: the analytic window weight against the
+  // direct trapezoid of the ldos() reconstruction (helper comment).
+  const double q_end = trapz_window(dos_end, a, w * a, n_grid);
+  const double q_blk = trapz_window(dos_bulk, a, w * a, n_grid);
+  std::snprintf(buf, sizeof buf,
+                "end %.3e, bulk %.3e (bound 1e-8; quadrature error at this "
+                "grid ~1e-13)",
+                std::fabs(q_end - w_end), std::fabs(q_blk - w_bulk));
+  check(std::fabs(q_end - w_end) <= 1e-8 &&
+            std::fabs(q_blk - w_bulk) <= 1e-8,
+        "ldos() trapezoid vs analytic window weight", buf);
 
   double h_zero = 0.0, h_band_end = 0.0, h_zero_bulk = 0.0,
          h_band_bulk = 0.0;

@@ -45,6 +45,12 @@
 //     n = 16384 extrapolates to ~1.6e-11 per moment; the window weights
 //     see <= ~7e-11 of it (coefficient l1 norm <= 4.4), 14x under the
 //     bound.
+//   * Quadrature cross-gate: |trapz(ldos) - W| <= 1e-7 at one point per
+//     regime (mu = 1.0 end row, 2.0 bulk row, 2.6 end row). R4 otherwise
+//     never calls ldos(): every other gate is a window-weight identity
+//     that consumes the analytic K formula on both sides, so a formula
+//     or ldos() normalization error would cancel. Measured quadrature
+//     error at n_grid = 16384: <= 3.3e-9.
 //   * Present (coarse, mu <= 1.8): W_end >= w_min = 0.05 against the
 //     exact row-0 weight (1 - r^2)/2 = 0.095 at mu = 1.8 — 1.9x of
 //     margin.
@@ -126,6 +132,24 @@ double kpm_window_weight(const std::vector<double>& mu, double th0,
   return w;
 }
 
+// Window weight by the midpoint rule in theta = arccos(E/a) of an
+// ldos() grid over |E| <= e_win; the independent path from moments to
+// window weight (derivation and motivation in the test_r3.cpp helper).
+// Measured quadrature error at this file's settings (n_cheb = n_grid =
+// 16384): 3.3e-9 worst over mu in {1.0, 2.0, 2.6} and both rows; the
+// 1e-7 pin carries 30x margin.
+double trapz_window(const std::vector<std::pair<double, double>>& dos,
+                    double a, double e_win, int n_grid) {
+  const double dth = std::numbers::pi / n_grid;
+  double acc = 0.0;
+  for (const auto& p : dos) {
+    if (std::fabs(p.first) > e_win)
+      continue;
+    acc += p.second * a * std::sin(std::acos(p.first / a)) * dth;
+  }
+  return acc;
+}
+
 double spectral_bound(const majorana::KitaevParams& kp) {
   const double s = 2.0 * kp.t + std::fabs(kp.mu);
   return std::sqrt(s * s + 4.0 * kp.delta * kp.delta);
@@ -183,6 +207,8 @@ int main() {
               "w_pair_end(ED)  W_bulk     E_gap_ED\n");
 
   double xgate_end = 0.0, xgate_bulk = 0.0;
+  double xquad = 0.0;
+  int n_quad = 0;
   for (auto& sp : pts) {
     const KitaevParams kp{L, 1.0, 1.0, sp.mu};
     const CsrMatrix H = kitaev_chain(kp);
@@ -221,10 +247,31 @@ int main() {
 
     // ---- The KPM side, after the pins. ----
     const LdosParams lp{n_cheb, sp.a, 0.0};
-    sp.w_end = kpm_window_weight(local_moments(H, 0, lp), sp.th0, g);
-    sp.w_bulk = kpm_window_weight(local_moments(H, bulk_row, lp), sp.th0, g);
+    const std::vector<double> mu_end = local_moments(H, 0, lp);
+    const std::vector<double> mu_blk = local_moments(H, bulk_row, lp);
+    sp.w_end = kpm_window_weight(mu_end, sp.th0, g);
+    sp.w_bulk = kpm_window_weight(mu_blk, sp.th0, g);
     xgate_end = std::max(xgate_end, std::fabs(sp.w_end - sp.pred_end));
     xgate_bulk = std::max(xgate_bulk, std::fabs(sp.w_bulk - sp.pred_bulk));
+
+    // Quadrature cross-gate at one coarse point per sweep regime:
+    // topological (mu = 1.0, end row), closed gap (mu = 2.0, bulk row),
+    // trivial (mu = 2.6, end row). The coarse flag excludes the fine
+    // bracket's own mu = 2.0.
+    if (sp.coarse && (sp.mu == 1.0 || sp.mu == 2.0 || sp.mu == 2.6)) {
+      const int n_grid = 16384;
+      const bool end_row = (sp.mu != 2.0);
+      const auto& moments = end_row ? mu_end : mu_blk;
+      const double w = end_row ? sp.w_end : sp.w_bulk;
+      const auto dos = ldos(moments, g, sp.a, 0.0, n_grid);
+      const double dq =
+          std::fabs(trapz_window(dos, sp.a, e_win, n_grid) - w);
+      xquad = std::max(xquad, dq);
+      ++n_quad;
+      std::printf("[info] quadrature at mu = %.1f, %s row: |trapz - "
+                  "analytic| = %.3e\n",
+                  sp.mu, end_row ? "end " : "bulk", dq);
+    }
 
     std::printf("[info] %5.2f  %.4e  %.4e    %.3e %.3e   %.4e      %.4e  "
                 "%.4f\n",
@@ -238,6 +285,12 @@ int main() {
                 pts.size(), xgate_end, xgate_bulk);
   check(xgate_end <= 1e-9 && xgate_bulk <= 1e-9,
         "Kill 2 cross-gate: window weights vs ED+kernel prediction", buf);
+
+  std::snprintf(buf, sizeof buf,
+                "worst |trapz - analytic| over %d points: %.3e (bound 1e-7)",
+                n_quad, xquad);
+  check(n_quad == 3 && xquad <= 1e-7,
+        "ldos() trapezoid vs analytic window weight", buf);
 
   // Present below (coarse, mu <= 1.8) and absent above (mu >= 2.2).
   double worst_present = 1e30;
