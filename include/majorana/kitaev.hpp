@@ -151,7 +151,8 @@ inline std::vector<double> local_moments(const CsrMatrix& A, int site,
     if (!(norm2 <= 1.0 + 1e-6))
       throw std::runtime_error(
           "local_moments: recurrence vector norm exceeded 1; the spectrum "
-          "of H is not covered by [b - a, b + a] (increase a)");
+          "of H is not covered by [b - a, b + a] (increase a), or H is "
+          "not symmetric");
   };
   std::vector<double> mu(p.n_cheb + 1);
   std::vector<double> t_prev(A.n, 0.0), t_cur(A.n), t_next(A.n);
